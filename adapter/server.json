@@ -7,12 +7,12 @@
     "source": "github",
     "subfolder": "adapter"
   },
-  "version": "0.2.10",
+  "version": "0.2.11",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@spectra-g/engram-adapter",
-      "version": "0.2.10",
+      "version": "0.2.11",
       "transport": {
         "type": "stdio"
       }

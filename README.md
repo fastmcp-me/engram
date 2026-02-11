@@ -8,9 +8,9 @@ While LLMs are excellent at analyzing the specific files you give them, they lac
 
 ## Why Engram?
 
-*    **Temporal Coupling:** Answers *"What usually changes when this file changes?"* to prevent the "fix one thing, break another" cycle.
-*    **Behavioural Guardrails:** extracts "Test Intents" (e.g., "should handle negative balance") so the AI understands *what* to preserve.
-*    **Nuance Capture:** Provides a lightweight store for you or the LLM to record undocumented architectural constraints, ensuring lessons learned aren't lost when you start a new conversation.
+*    **Temporal History:** Answers *"What usually changes when this file changes?"* to prevent the "fix one thing, break another" cycle.
+*    **Test Intent:** Extracts test intent strings (e.g., "should handle negative balance") so the AI understands *what behaviour* to preserve.
+*    **Organizational Memory:** A persistent store for you or the LLM to record undocumented architectural constraints, ensuring lessons learned aren't lost when you start a new conversation.
 
 ### Built for Privacy. Public for Integrity.
 
@@ -18,15 +18,43 @@ While LLMs are excellent at analyzing the specific files you give them, they lac
 *    **Zero Telemetry:** We do not track your usage, your code, or your identity.
 *    **Audit it yourself:** The source code is available below.
 
+## Real-World Example: The Bug That Tests Can't Catch
+
+A TypeScript service (`TransactionExportService`) writes pipe-delimited lines like `TXN-001|2024-11-15|250.00|COMPLETED`. A legacy JavaScript cron job (`legacy-mainframe-sync.js`) parses them using **hardcoded array indices** — `parts[2]` for amount, `parts[3]` for status. There are zero imports between them. No shared types. Nothing in the code connects them.
+
+**The task:** *"Add a `currency` field next to the amount."*
+
+### Without Engram
+
+The AI agent updates the TypeScript service and tests. The export format becomes `ID|DATE|AMOUNT|CURRENCY|STATUS`. All tests pass. The PR ships.
+
+**The problem:** The legacy script still reads `parts[3]` expecting a status like `COMPLETED` - but now gets `USD`. `parseFloat("USD")` returns `NaN`. The mainframe receives corrupted data. Nothing failed. Nothing warned. Silent breakage in production.
+
+### With Engram
+
+Before writing any code, the agent calls `get_impact_analysis`. Engram checks git history and returns:
+
+> **Critical Risk (0.99):** `bin/legacy-mainframe-sync.js` — Changed together in 21 of 21 commits (100%)
+
+The agent reads the flagged file, finds the positional parser, and updates **both** files together. Same feature, zero breakage.
+
+After the fix, the agent calls `save_project_note`:
+
+> *"The export line format is consumed by bin/legacy-mainframe-sync.js using hardcoded positional indices. Any change to field order MUST be mirrored there. Current format: ID|DATE|AMOUNT|CURRENCY|STATUS (indices 0-4)."*
+
+Now every future agent gets this warning automatically - before it writes a single line of code.
+
+---
+
 ## What It Does
 
-**1. Temporal Analysis (Blast Radius)**
-*    **What:** Instantly analyzes git history to find files that are frequently committed alongside your target file.
+**1. Temporal Graph**
+*    **What:** Mines git history to find files that are frequently committed alongside your target file.
 *    **Why:** To reveal hidden dependencies. If `A.ts` and `B.ts` changed together 40 times in the last year, your AI needs to know about `B.ts` before editing `A.ts`.
 
-**2. Test Intent Discovery**
+**2. Validation Graph**
 *    **What:** Automatically locates relevant tests and extracts their specific intent strings (e.g., `it("should validate JWT expiration")`).
-*    **Why:** To provide immediate behavioural context. The AI can check its plan against your existing test requirements without needing to read the full test suite.
+*    **Why:** To provide behavioural guardrails. The AI can check its plan against your existing test requirements without needing to read the full test suite.
 
 **3. Knowledge Graph**
 *    **What:** A persistent store where the LLM can save/retrieve "memories" about architectural decisions, edge cases, or project quirks.
